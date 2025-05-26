@@ -1,0 +1,311 @@
+# Add the Grafana APT repository
+sudo apt-get install -y software-properties-common
+sudo add-apt-repository "deb https://packages.grafana.com/oss/deb stable main"
+
+# Add Grafana GPG key
+sudo wget -q -O - https://packages.grafana.com/gpg.key | sudo apt-key add -
+
+# Update & install
+sudo apt update
+sudo apt install grafana -y
+
+
+# Enable and start the service
+sudo systemctl enable grafana-server
+sudo systemctl start grafana-server
+
+# Check status
+sudo systemctl status grafana-server
+
+
+localhost:3000
+admin/admin
+
+
+
+Step 1: Open Grafana
+Go to http://localhost:3000 and login.
+
+Step 2: Add PostgreSQL as a Data Source
+Left sidebar → Gear icon → Data Sources
+
+Click "Add data source"
+
+Choose PostgreSQL
+
+Fill in the details:
+
+Host: localhost:5432
+
+Database: csir
+
+User: csiruser
+
+Password: your-password
+
+SSL Mode: disable (if local)
+
+Click "Save & Test"
+
+
+Left sidebar → "+" → Dashboard
+
+Click "Add a new panel"
+
+Use this query (for example, node load):
+
+sql
+Copy
+Edit
+SELECT
+  timestamp AS "time",
+  load AS "value",
+  node_id
+FROM
+  node_load
+WHERE
+  $__timeFilter(timestamp)
+Set:
+
+Format: Time series
+
+Visualization: Line chart (or Bar gauge, etc.)
+
+Click Apply to save the panel.
+
+You can repeat similar steps for:
+
+CPU temperature (from node_metrics)
+
+Power consumption (from node_metrics)
+
+Node status summary (from node_status)
+
+
+✅ Optional: Enable External Access to Grafana
+Edit the config if you want to access Grafana from other machines:
+
+bash
+Copy
+Edit
+sudo nano /etc/grafana/grafana.ini
+Uncomment and set:
+
+ini
+Copy
+Edit
+[server]
+http_addr = 0.0.0.0
+Then restart:
+
+bash
+Copy
+Edit
+sudo systemctl restart grafana-server
+
+
+
+
+
+
+Live CPU Temperature (per node)
+➤ Query
+sql
+Copy
+Edit
+SELECT
+  timestamp AS "time",
+  (cpu1_temp + cpu2_temp) / 2 AS "avg_cpu_temp",
+  node_id
+FROM
+  node_metrics
+WHERE
+  $__timeFilter(timestamp)
+  
+  
+Power Consumption (total or per node)
+➤ Query (per node)
+sql
+Copy
+Edit
+SELECT
+  timestamp AS "time",
+  power_consumption,
+  node_id
+FROM
+  node_metrics
+WHERE
+  $__timeFilter(timestamp)
+  
+  
+ Query (total)
+sql
+Copy
+Edit
+SELECT
+  timestamp AS "time",
+  SUM(power_consumption) AS total_power
+FROM
+  node_metrics
+WHERE
+  $__timeFilter(timestamp)
+GROUP BY timestamp
+ORDER BY timestamp
+
+
+Node Load Over Time
+sql
+Copy
+Edit
+SELECT
+  timestamp AS "time",
+  load,
+  node_id
+FROM
+  node_load
+WHERE
+  $__timeFilter(timestamp)
+  
+  
+ 4. Max / Avg Temperature per Rack
+Assumes node_id is in rXXcnYY format.
+
+sql
+Copy
+Edit
+SELECT
+  SUBSTRING(node_id FROM 2 FOR 2) AS rack,
+  AVG((cpu1_temp + cpu2_temp) / 2) AS avg_temp
+FROM
+  node_metrics
+WHERE
+  $__timeFilter(timestamp)
+GROUP BY rack
+ORDER BY rack
+
+
+
+
+Node Status Summary (online / offline / down)
+sql
+Copy
+Edit
+SELECT
+  timestamp AS "time",
+  online,
+  offline,
+  down
+FROM
+  node_status
+WHERE
+  $__timeFilter(timestamp)
+ORDER BY timestamp
+
+
+
+
+
+Top 5 Hottest Nodes (average temp over time)
+sql
+Copy
+Edit
+SELECT
+  node_id,
+  AVG((cpu1_temp + cpu2_temp) / 2) AS avg_temp
+FROM
+  node_metrics
+WHERE
+  $__timeFilter(timestamp)
+GROUP BY node_id
+ORDER BY avg_temp DESC
+LIMIT 5
+
+
+7. Node Load & Power Correlation
+sql
+Copy
+Edit
+SELECT
+  l.timestamp AS "time",
+  l.node_id,
+  l.load,
+  m.power_consumption
+FROM
+  node_load l
+JOIN
+  node_metrics m
+ON
+  l.timestamp = m.timestamp AND l.node_id = m.node_id
+WHERE
+  $__timeFilter(l.timestamp)
+
+
+
+
+GPU vs CPU Node Comparison (Power / Temp)
+➤ Power
+sql
+Copy
+Edit
+SELECT
+  m.timestamp AS "time",
+  n.is_gpu,
+  AVG(m.power_consumption) AS avg_power
+FROM
+  node_metrics m
+JOIN
+  nodes n ON m.node_id = n.node_id
+WHERE
+  $__timeFilter(m.timestamp)
+GROUP BY m.timestamp, n.is_gpu
+ORDER BY m.timestamp
+
+
+
+
+9. Threshold-Based Alerts (e.g. High CPU Temp)
+sql
+Copy
+Edit
+SELECT
+  timestamp AS "time",
+  node_id,
+  (cpu1_temp + cpu2_temp) / 2 AS avg_temp
+FROM
+  node_metrics
+WHERE
+  $__timeFilter(timestamp)
+  AND (cpu1_temp + cpu2_temp) / 2 > 80
+  
+  
+  
+  
+  10. Node Downtime Frequency
+Count how many times a node is marked "down" in node_status:
+
+sql
+Copy
+Edit
+SELECT
+  node_id,
+  COUNT(*) AS down_count
+FROM (
+  SELECT
+    timestamp,
+    node_id,
+    CASE
+      WHEN load IS NULL OR load = 0 THEN 1
+      ELSE 0
+    END AS is_down
+  FROM
+    node_load
+  WHERE $__timeFilter(timestamp)
+) AS sub
+WHERE is_down = 1
+GROUP BY node_id
+ORDER BY down_count DESC
+
+
+
+
+
