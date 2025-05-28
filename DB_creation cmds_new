@@ -1,0 +1,69 @@
+-- Table to store node master info
+CREATE TABLE nodes (
+    node_id VARCHAR(10) PRIMARY KEY,
+    is_gpu BOOLEAN
+);
+
+
+-- Temperature metrics from sensors
+CREATE TABLE node_temp (
+    node_id VARCHAR(10) REFERENCES nodes(node_id),
+    timestamp TIMESTAMP(6) NOT NULL,
+    cpu1_temp NUMERIC(5,2),
+    cpu2_temp NUMERIC(5,2),
+    PRIMARY KEY (node_id, timestamp)
+);
+
+
+-- Node load and power readings
+CREATE TABLE node_metrics (
+    node_id VARCHAR(10) REFERENCES nodes(node_id),
+    timestamp TIMESTAMP(6) NOT NULL,
+    load NUMERIC(7,3),
+    power_consum NUMERIC(7,3),
+    PRIMARY KEY (node_id, timestamp)
+);
+
+
+
+--use enum for clarity
+--CREATE TYPE node_status_enum AS ENUM ('online', 'offline', 'down');
+--    status node_status_enum NOT NULL,
+CREATE TABLE node_status (
+    node_id VARCHAR(10) NOT NULL REFERENCES nodes(node_id),
+    timestamp TIMESTAMP(6) NOT NULL,
+    is_offline BOOLEAN NOT NULL DEFAULT FALSE,
+    is_online BOOLEAN NOT NULL DEFAULT FALSE,
+    is_down BOOLEAN NOT NULL DEFAULT FALSE,
+    PRIMARY KEY (node_id, timestamp)
+);
+
+COMMENT ON TABLE node_status IS
+'Note: When querying:
+ - Number of offline nodes = count of nodes where is_offline = true OR is_down = true
+ - Number of down nodes = count of nodes where is_down = true only
+';
+
+
+CREATE TABLE gpu_cards (
+    card_id VARCHAR(12),
+    timestamp TIMESTAMP(6) NOT NULL,
+    is_healthy BOOLEAN,
+    power_consum NUMERIC(7,3),
+    utilization NUMERIC(5,2),
+    memory NUMERIC(9,3),
+    temperature NUMERIC(5,2),
+    PRIMARY KEY (card_id, timestamp)
+);
+
+
+CREATE TABLE storage_metrics (
+    timestamp TIMESTAMP(6) PRIMARY KEY,
+    home_used NUMERIC(12,3),
+    home_total NUMERIC(12,3) DEFAULT 0,
+    scratch_used NUMERIC(12,3),
+    scratch_total NUMERIC(12,3) DEFAULT 0,
+    cm_shared_used NUMERIC(12,3),
+    cm_shared_total NUMERIC(12,3) DEFAULT 0
+);
+
