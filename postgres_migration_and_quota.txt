@@ -1,0 +1,88 @@
+
+PostgreSQL Data Directory Migration and Disk Quota Setup
+========================================================
+
+This document records all commands and configuration changes made for:
+
+1. Moving PostgreSQL data directory to a new mount (/mnt/postgres_data)
+2. Setting disk quota (512 GB) for the 'postgres' user on Ubuntu
+
+Date: 2025-05-29
+
+----------------------------------------------------------------------
+PostgreSQL Data Directory Migration
+----------------------------------------------------------------------
+
+- Create a new directory for storing PostgreSQL data:
+  sudo mkdir /mnt/postgres_data
+
+- Stop PostgreSQL service:
+  sudo systemctl stop postgresql
+
+- Check existing PostgreSQL data directory (typically /var/lib/postgresql/<version>/main):
+  sudo -u postgres psql -c "SHOW data_directory;"
+
+- Copy all data to the new mount:
+  sudo rsync -av /var/lib/postgresql /mnt/postgres_data/
+
+- Backup the old data directory:
+  sudo mv /var/lib/postgresql /var/lib/postgresql.bak
+
+- Create a symbolic link so PostgreSQL can still access its data:
+  sudo ln -s /mnt/postgres_data/postgresql /var/lib/postgresql
+
+- Set correct ownership for the new data directory:
+  sudo chown -R postgres:postgres /mnt/postgres_data/postgresql
+
+- Restart PostgreSQL service:
+  sudo systemctl start postgresql
+  sudo systemctl status postgresql
+
+- Optional: Remove old backup if everything works fine:
+  sudo rm -rf /var/lib/postgresql.bak
+
+
+----------------------------------------------------------------------
+Disk Quota Setup for 'postgres' User
+----------------------------------------------------------------------
+
+- Install required quota packages:
+  sudo apt update
+  sudo apt install quota
+
+- Modify /etc/fstab to enable user quota on root filesystem:
+  sudo nano /etc/fstab
+
+  Modify the relevant line (usually for /dev/sda2):
+  Before:
+    /dev/sda2 / ext4 defaults 0 1
+  After:
+    /dev/sda2 / ext4 defaults,usrquota 0 1
+
+- Remount the root filesystem and reload systemd:
+  sudo mount -o remount /
+  sudo systemctl daemon-reexec
+
+- Initialize quota tracking on the filesystem:
+  sudo quotacheck -cum /
+
+- Enable quota:
+  sudo quotaon /
+
+- Set 512GB quota for the 'postgres' user:
+  sudo edquota -u postgres
+
+  Edit the file to set soft and hard block limits to 524288000 (512 GB in KB)
+
+- Check quota is applied:
+  sudo quota -u postgres
+
+- Confirm quota tracking files exist:
+  ls /aquota.user
+
+----------------------------------------------------------------------
+Notes:
+- All changes are made with the goal of persistent PostgreSQL data storage on a new disk and restricting disk usage by the postgres user.
+- 512 GB = 524288000 KB used in the quota limits.
+- Symbolic linking ensures no need to modify PostgreSQL configuration files.
+- Quota settings are on root (/) assuming /mnt is not a separate partition.
