@@ -3,64 +3,82 @@
 import csv
 import datetime
 import paramiko
- 
+
 NODES_FILE = "nodes.txt"
-CSV_FILE = "node_status_log.csv"
-SSH_HOST = "your_user@your_host"  # <-- fill in
-SSH_COMMAND = "pbsnodes -l"
- 
- 
+CSV_FILE = "node_status_test.csv"
+SSH_HOST = "swapnil@192.168.103.50"
+SSH_COMMAND = "/opt/pbs/bin/pbsnodes -l"
+
+# Hardcoded SSH password for testing only 
+SSH_PASSWORD = "Sachinbhai@3"
+
+
 def get_all_nodes():
     with open(NODES_FILE, "r") as f:
         return [line.strip() for line in f if line.strip()]
- 
- 
+
+
 def run_remote_command():
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    host, user = SSH_HOST.split("@")
-    client.connect(hostname=host, username=user)  # Add key_filename if needed
+
+    user, host = SSH_HOST.split("@")
+    client.connect(
+        hostname=host,
+        username=user,
+        password=SSH_PASSWORD,
+        timeout=10,
+        look_for_keys=False,
+        allow_agent=False
+    )
     stdin, stdout, stderr = client.exec_command(SSH_COMMAND)
     output = stdout.read().decode()
     client.close()
     return output
- 
- 
+
+
 def parse_output(output):
     status_map = {}
     for line in output.strip().splitlines():
-        if not line:
+        if not line.strip():
             continue
-        parts = line.split()
+
+        parts = line.split(maxsplit=1)
         node_id = parts[0]
-        status = " ".join(parts[1:])
-        status_map[node_id] = {
-            "is_down": "down" in status.lower(),
-            "is_offline": "offline" in status.lower(),
-        }
+        status_text = parts[1].strip() if len(parts) > 1 else ""
+
+        # Get only the comma-separated flags (ignore the reason part)
+        raw_flags = status_text.split(" ", 1)[0]
+        status_flags = [flag.strip().lower() for flag in raw_flags.split(",")]
+
+        # Prioritize status down > offline
+        if "down" in status_flags:
+            status_map[node_id] = "down"
+        elif "offline" in status_flags:
+            status_map[node_id] = "offline"
+        # else: online nodes will be handled later
     return status_map
- 
- 
+
+
 def write_to_csv(all_nodes, status_map):
     timestamp = datetime.datetime.now().replace(microsecond=0)
     with open(CSV_FILE, "a", newline="") as csvfile:
         writer = csv.writer(csvfile)
         for node in all_nodes:
-            is_offline = status_map.get(node, {}).get("is_offline", False)
-            is_down = status_map.get(node, {}).get("is_down", False)
-            is_online = not is_offline and not is_down
-            writer.writerow([node, timestamp, is_online, is_offline, is_down])
- 
- 
+            status = status_map.get(node, "online")
+            writer.writerow([node, timestamp, status])
+
+
 def main():
     all_nodes = get_all_nodes()
     output = run_remote_command()
     status_map = parse_output(output)
     write_to_csv(all_nodes, status_map)
- 
- 
+
+
 if __name__ == "__main__":
     main()
+
 
 
 
@@ -71,79 +89,119 @@ if __name__ == "__main__":
 #🧩 DB Version: record_node_status_db.py
  
  
-import psycopg2
 import datetime
 import paramiko
- 
+import psycopg2  # PostgreSQL driver
+
+# --- CONFIGURATIONS ---
+
 NODES_FILE = "nodes.txt"
-SSH_HOST = "your_user@your_host"  # <-- fill in
-SSH_COMMAND = "pbsnodes -l"
- 
+SSH_HOST = "swapnil@192.168.103.50"
+SSH_COMMAND = "/opt/pbs/bin/pbsnodes -l"
+
+# --- DB CONNECTION PLACEHOLDER (fill in your values) ---
+
 DB_CONFIG = {
-    "dbname": "your_db",
-    "user": "your_user",
-    "password": "your_pass",
-    "host": "your_host",
-    "port": "5432"
+    "host": "your_db_host",         # e.g., "localhost" or IP
+    "port": 5432,                   # default PostgreSQL port
+    "dbname": "your_db_name",       # e.g., "supercomputer"
+    "user": "your_username",        # e.g., "postgres"
+    "password": "your_password"     # secure this in production!
 }
- 
- 
+
+
+# --- GET LIST OF ALL NODES ---
+
 def get_all_nodes():
     with open(NODES_FILE, "r") as f:
         return [line.strip() for line in f if line.strip()]
- 
- 
-def run_remote_command():
+
+
+# --- RUN SSH COMMAND TO FETCH NODE STATUS ---
+
+def run_remote_command(password):
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    host, user = SSH_HOST.split("@")
-    client.connect(hostname=host, username=user)  # Add key_filename if needed
+
+    user, host = SSH_HOST.split("@")
+    client.connect(
+        hostname=host,
+        username=user,
+        password=password,
+        timeout=10,
+        look_for_keys=False,
+        allow_agent=False
+    )
     stdin, stdout, stderr = client.exec_command(SSH_COMMAND)
     output = stdout.read().decode()
     client.close()
     return output
- 
- 
+
+
+# --- PARSE OUTPUT TO EXTRACT STATUS FLAGS ---
+
 def parse_output(output):
     status_map = {}
     for line in output.strip().splitlines():
-        if not line:
+        if not line.strip():
             continue
-        parts = line.split()
+
+        parts = line.split(maxsplit=1)
         node_id = parts[0]
-        status = " ".join(parts[1:])
-        status_map[node_id] = {
-            "is_down": "down" in status.lower(),
-            "is_offline": "offline" in status.lower(),
-        }
+        status_text = parts[1].strip() if len(parts) > 1 else ""
+
+        # Get only the comma-separated flags (ignore the reason part)
+        raw_flags = status_text.split(" ", 1)[0]
+        status_flags = [flag.strip().lower() for flag in raw_flags.split(",")]
+
+        # Prioritize status: down > offline > online
+        if "down" in status_flags:
+            status_map[node_id] = "down"
+        elif "offline" in status_flags:
+            status_map[node_id] = "offline"
+        # else: online will be handled later
+
     return status_map
- 
- 
-def insert_into_db(all_nodes, status_map):
+
+
+# --- INSERT STATUS INTO DATABASE ---
+
+def insert_to_db(all_nodes, status_map):
     timestamp = datetime.datetime.now().replace(microsecond=0)
-    conn = psycopg2.connect(**DB_CONFIG)
-    cur = conn.cursor()
-    for node in all_nodes:
-        is_offline = status_map.get(node, {}).get("is_offline", False)
-        is_down = status_map.get(node, {}).get("is_down", False)
-        is_online = not is_offline and not is_down
- 
-        cur.execute("""
-            INSERT INTO node_status (node_id, timestamp, is_online, is_offline, is_down)
-            VALUES (%s, %s, %s, %s, %s)
+
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor()
+
+        insert_query = """
+            INSERT INTO node_status (node_id, timestamp, status)
+            VALUES (%s, %s, %s)
             ON CONFLICT (node_id, timestamp) DO NOTHING;
-        """, (node, timestamp, is_online, is_offline, is_down))
-    conn.commit()
-    cur.close()
-    conn.close()
- 
- 
+        """
+
+        for node in all_nodes:
+            status = status_map.get(node, "online")
+            cursor.execute(insert_query, (node, timestamp, status))
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+        print(f"[INFO] Inserted {len(all_nodes)} rows at {timestamp}.")
+
+    except Exception as e:
+        print("[ERROR] Failed to insert into DB:", e)
+
+
+# --- MAIN LOGIC ---
+
 def main():
+    ssh_password = "your_ssh_password"  # <-- Replace with actual password (or use a secret manager)
     all_nodes = get_all_nodes()
-    output = run_remote_command()
+    output = run_remote_command(ssh_password)
     status_map = parse_output(output)
-    insert_into_db(all_nodes, status_map)
- 
- 
+    insert_to_db(all_nodes, status_map)
+
+
 if __name__ == "__main__":
     main()
+

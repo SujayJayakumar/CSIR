@@ -1,0 +1,94 @@
+Here's a condensed summary of everything covered in this chat so you can migrate and resume easily:
+🧱 Database Schema Design (PostgreSQL)
+✅ Tables Designed:
+
+    nodes – Master list of node IDs and GPU flag
+
+    node_id VARCHAR(10) PRIMARY KEY, is_gpu BOOLEAN
+
+    node_temp – Stores CPU temperature readings per node
+
+        NUMERIC(5,2) for cpu1_temp and cpu2_temp
+
+        Primary key: (node_id, timestamp)
+
+    node_metrics – Stores node load and power
+
+        load and power as NUMERIC(7,3)
+
+        Primary key: (node_id, timestamp)
+
+    node_status – Tracks node availability (online, offline, down)
+
+        3 booleans with default FALSE
+
+        Primary key: (node_id, timestamp)
+
+        Comment explains how to interpret offline/down logic
+
+    gpu_cards – GPU health and usage metrics
+
+        card_id VARCHAR(12), primary key (card_id, timestamp)
+
+        Fields: is_healthy, power, utilization, memory, temperature
+
+    storage_metrics – Home, scratch, and cm/shared storage usage
+
+        All storage values as NUMERIC(12,3) (TiB/PiB scale)
+
+        Primary key: timestamp
+
+        Default values for *_total fields
+
+💡 PostgreSQL Choices Justified:
+
+    Used NUMERIC(p,s) for precise, scalable values
+
+    Used TIMESTAMP(6) for microsecond precision
+
+    Considered using enums for node_status, but deferred
+
+    Ensured naming conventions are clean and consistent (snake_case)
+
+🛠️ Script Design for Probing pbsnodes -l
+Common Logic:
+
+    Runs pbsnodes -l remotely via SSH
+
+    If output is empty → all nodes are online
+
+    Parses output to extract node_id, and determine is_offline, is_down
+
+    Compares against full node list to infer statuses for all 422 nodes
+
+    Uses current system timestamp
+
+1. CSV Version (record_node_status_csv.py)
+
+    Reads node list from static nodes.txt
+
+    SSH to HPC head node
+
+    Outputs to node_status_log.csv
+
+    Appends all 422 node statuses per run
+
+2. DB Version (record_node_status_db.py)
+
+    Same logic as CSV version
+
+    Uses psycopg2 to insert into node_status table
+
+    Uses placeholder DB connection config
+
+    Ignores duplicates via ON CONFLICT DO NOTHING
+
+📌 What You Need to Resume
+
+    Your static file: nodes.txt (one node per line)
+
+    SSH key setup or passwordless access to target
+
+    PostgreSQL instance and credentials
+
+    Schedule (e.g., with cron) if periodic execution is required

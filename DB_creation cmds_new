@@ -20,21 +20,18 @@ CREATE TABLE node_metrics (
     node_id VARCHAR(10) REFERENCES nodes(node_id),
     timestamp TIMESTAMP(6) NOT NULL,
     load NUMERIC(7,3),
-    power_consum NUMERIC(7,3),
+    power NUMERIC(7,3),
     PRIMARY KEY (node_id, timestamp)
 );
 
 
 
---use enum for clarity
---CREATE TYPE node_status_enum AS ENUM ('online', 'offline', 'down');
---    status node_status_enum NOT NULL,
+-- node status table
+CREATE TYPE node_status_enum AS ENUM ('online', 'offline', 'down');    
 CREATE TABLE node_status (
     node_id VARCHAR(10) NOT NULL REFERENCES nodes(node_id),
     timestamp TIMESTAMP(6) NOT NULL,
-    is_offline BOOLEAN NOT NULL DEFAULT FALSE,
-    is_online BOOLEAN NOT NULL DEFAULT FALSE,
-    is_down BOOLEAN NOT NULL DEFAULT FALSE,
+    status node_status_enum NOT NULL,
     PRIMARY KEY (node_id, timestamp)
 );
 
@@ -49,7 +46,7 @@ CREATE TABLE gpu_cards (
     card_id VARCHAR(12),
     timestamp TIMESTAMP(6) NOT NULL,
     is_healthy BOOLEAN,
-    power_consum NUMERIC(7,3),
+    power NUMERIC(7,3),
     utilization NUMERIC(5,2),
     memory NUMERIC(9,3),
     temperature NUMERIC(5,2),
