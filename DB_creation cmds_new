@@ -20,7 +20,7 @@ CREATE TABLE node_metrics (
     node_id VARCHAR(10) REFERENCES nodes(node_id),
     timestamp TIMESTAMP(6) NOT NULL,
     load NUMERIC(7,3),
-    power NUMERIC(7,3),
+    power_consum NUMERIC(7,3),
     PRIMARY KEY (node_id, timestamp)
 );
 
@@ -37,8 +37,8 @@ CREATE TABLE node_status (
 
 COMMENT ON TABLE node_status IS
 'Note: When querying:
- - Number of offline nodes = count of nodes where is_offline = true OR is_down = true
- - Number of down nodes = count of nodes where is_down = true only
+ - Number of offline nodes = count of nodes offline = true OR down = true
+ - Number of down nodes = count of nodes where down = true only
 ';
 
 
@@ -46,7 +46,7 @@ CREATE TABLE gpu_cards (
     card_id VARCHAR(12),
     timestamp TIMESTAMP(6) NOT NULL,
     is_healthy BOOLEAN,
-    power NUMERIC(7,3),
+    power_consum NUMERIC(7,3),
     utilization NUMERIC(5,2),
     memory NUMERIC(9,3),
     temperature NUMERIC(5,2),
@@ -56,11 +56,11 @@ CREATE TABLE gpu_cards (
 
 CREATE TABLE storage_metrics (
     timestamp TIMESTAMP(6) PRIMARY KEY,
-    home_used NUMERIC(12,3),
-    home_total NUMERIC(12,3) DEFAULT 0,
-    scratch_used NUMERIC(12,3),
-    scratch_total NUMERIC(12,3) DEFAULT 0,
-    cm_shared_used NUMERIC(12,3),
-    cm_shared_total NUMERIC(12,3) DEFAULT 0
+    home_used NUMERIC(18,3),
+    home_total NUMERIC(18,3) DEFAULT 0,		--check totals
+    scratch_used NUMERIC(18,3),
+    scratch_total NUMERIC(18,3) DEFAULT 0,
+    cm_shared_used NUMERIC(18,3),
+    cm_shared_total NUMERIC(18,3) DEFAULT 0
 );
 
