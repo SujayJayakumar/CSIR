@@ -2,8 +2,8 @@ import csv
 import datetime
 import paramiko
 
-NODES_FILE = "nodes.txt"
-CSV_FILE = "node_status_test.csv"
+NODES_FILE = "/home/xwiki/hpc_monitoring/nodes.txt"
+CSV_FILE = "/home/xwiki/hpc_monitoring/node_status_test.csv"
 SSH_HOST = "swapnil@192.168.103.50"
 SSH_COMMAND = "/opt/pbs/bin/pbsnodes -l"
 
